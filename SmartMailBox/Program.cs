@@ -36,7 +36,7 @@ namespace SmartMailBox
 				if (_state != value) 
 				{
 					_state = value;
-					System.Console.WriteLine(DateTime.Now + ": New State:" + value.ToString());
+					//System.Console.WriteLine(DateTime.Now + ": New State:" + value.ToString());
 					System.Threading.Tasks.Task t = System.Threading.Tasks.Task.Factory.StartNew(Notify);
 					t.Wait();
 					t.Dispose();
@@ -55,11 +55,11 @@ namespace SmartMailBox
 				var stopTime = System.DateTime.Now.AddSeconds(lockSeconds);
 				while (System.DateTime.Now <= stopTime)
 				{
-					System.Console.WriteLine(DateTime.Now + ": Lock!");
+					//System.Console.WriteLine(DateTime.Now + ": Lock!");
 					System.Threading.Thread.Sleep(1000);
 				}
 				Segment4x7.WriteSegments(OFF);
-				System.Console.WriteLine(DateTime.Now + ": Unlocked!");
+				//System.Console.WriteLine(DateTime.Now + ": Unlocked!");
 				lockable = false;
 				dus.SetDistanceCallbackThreshold('o', 0, 1);
 				CurrentState = State.off;
@@ -108,7 +108,7 @@ namespace SmartMailBox
 		// send command to FHEM
 		static void SendFhemCommand(string fhemCommand)
 		{
-			System.Console.WriteLine(DateTime.Now + ": Notifying...");
+			//System.Console.WriteLine(DateTime.Now + ": Notifying...");
 			var request = (HttpWebRequest)WebRequest.Create(FHEMADDRESS + "/fhem?cmd={" + fhemCommand + "}");
 			request.Timeout = 5000;
 			WebResponse response;
@@ -117,7 +117,7 @@ namespace SmartMailBox
 				response = request.GetResponse();
 				response.Close();
 				request.Abort();
-				System.Console.WriteLine(DateTime.Now + ": Notified!");
+				//System.Console.WriteLine(DateTime.Now + ": Notified!");
 			}
 			catch (Exception ex)
 			{
