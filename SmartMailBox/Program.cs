@@ -13,10 +13,16 @@ namespace SmartMailBox
 		private static int PORT = 4223;
 		private static string UID = "jB1"; // Change to your UID!
 
+		private static readonly byte[] POST = { 0x73, 0x3f, 0x6d, 0x78 };
+		private static readonly byte[] OFF = { 0x0, 0x0, 0x0, 0x0, };
+		private static readonly byte[] LOCK = { 0x3f, 0x3f, 0x3f, 0x3f, };
+
 		private const string FHEMADDRESS = "http://192.168.0.127:8083";
 		private const int lockTimeSeconds = 5;
 
 		private static bool lockable = true;
+
+		private static BrickletDistanceUS dus;
 
 		private enum State { off, on, locked };
 		private static State _state;
@@ -31,7 +37,9 @@ namespace SmartMailBox
 				{
 					_state = value;
 					System.Console.WriteLine(DateTime.Now + ": New State:" + value.ToString());
-					Notify();
+					System.Threading.Tasks.Task t = System.Threading.Tasks.Task.Factory.StartNew(Notify);
+					t.Wait();
+					t.Dispose();
 				}
 			} 
 		}
@@ -42,16 +50,18 @@ namespace SmartMailBox
 			if (lockable == true)
 			{
 				CurrentState = State.locked;
-				Segment4x7.ShowLock();
+				dus.SetDistanceCallbackThreshold('x', 0, 0);
+				Segment4x7.WriteSegments(LOCK);
 				var stopTime = System.DateTime.Now.AddSeconds(lockSeconds);
 				while (System.DateTime.Now <= stopTime)
 				{
 					System.Console.WriteLine(DateTime.Now + ": Lock!");
 					System.Threading.Thread.Sleep(1000);
 				}
-				Segment4x7.TurnOffSegment();
+				Segment4x7.WriteSegments(OFF);
 				System.Console.WriteLine(DateTime.Now + ": Unlocked!");
 				lockable = false;
+				dus.SetDistanceCallbackThreshold('o', 0, 1);
 				CurrentState = State.off;
 			}
 		}
@@ -65,13 +75,13 @@ namespace SmartMailBox
 				if (distance < 550 || distance > 630)
 				{
 					//System.Console.WriteLine(DateTime.Now + ": Distance value out of range: " + distance);
+					Segment4x7.WriteSegments(POST);
 					CurrentState = State.on;
-					Segment4x7.ShowSegmentText();
 				}
 				else
 				{
+					Segment4x7.WriteSegments(OFF);
 					CurrentState = State.off;
-					Segment4x7.TurnOffSegment();
 				}
 			}
 		}
@@ -82,15 +92,15 @@ namespace SmartMailBox
 			switch (CurrentState)
 			{
 				case State.off:
-					//SendFhemCommand("SetSmartMailBoxOff();;");
+					SendFhemCommand("SetSmartMailBoxOff();;");
 					RunLockCountDown(lockTimeSeconds);
 					break;
 				case State.on:
-					//SendFhemCommand("SetSmartMailBoxOn();;");
+					SendFhemCommand("SetSmartMailBoxOn();;");
 					lockable = true;
 					break;
 				case State.locked:
-					//SendFhemCommand("SetSmartMailBoxLocked();;");
+					SendFhemCommand("SetSmartMailBoxLocked();;");
 					break;
 			}
 		}
@@ -98,17 +108,25 @@ namespace SmartMailBox
 		// send command to FHEM
 		static void SendFhemCommand(string fhemCommand)
 		{
-			//System.Console.WriteLine(DateTime.Now + ": Notifying...");
+			System.Console.WriteLine(DateTime.Now + ": Notifying...");
+			var request = (HttpWebRequest)WebRequest.Create(FHEMADDRESS + "/fhem?cmd={" + fhemCommand + "}");
+			request.Timeout = 5000;
+			WebResponse response;
 			try
 			{
-				var request = (HttpWebRequest)WebRequest.Create(FHEMADDRESS + "/fhem?cmd={" + fhemCommand + "}");
-				WebResponse response = request.GetResponse();
-				request = null;
-				response = null;
+				response = request.GetResponse();
+				response.Close();
+				request.Abort();
+				System.Console.WriteLine(DateTime.Now + ": Notified!");
 			}
 			catch (Exception ex)
 			{
-				System.Console.WriteLine(DateTime.Now + ": Error - " + ex.ToString());
+				System.Console.WriteLine(DateTime.Now + ": Error - " + fhemCommand + " - " + ex.ToString());
+			}
+			finally
+			{
+				request = null;
+				response = null;
 			}
 		}
 
@@ -116,21 +134,21 @@ namespace SmartMailBox
 		{
 			System.Console.WriteLine(DateTime.Now + ": Starting... ");
 			IPConnection ipcon = new IPConnection(); // Create IP connection
-			BrickletDistanceUS dir = new BrickletDistanceUS(UID, ipcon); // Create device object
+			dus = new BrickletDistanceUS(UID, ipcon); // Create device object
 
-			Segment4x7.TurnOffSegment();
+			Segment4x7.WriteSegments(OFF);
 
 			ipcon.Connect(HOST, PORT); // Connect to brickd
 			// Don't use device before ipcon is connected
 
 			// Get threshold callbacks with a debounce time of 1 second (1000ms)
-			dir.SetDebouncePeriod(1000);
+			dus.SetDebouncePeriod(1000);
 
 			// Register threshold reached callback to function ReachedCB
-			dir.DistanceReached += ReachedCB;
+			dus.DistanceReached += ReachedCB;
 
 			// Configure threshold 
-			dir.SetDistanceCallbackThreshold('o', 0, 1);
+			dus.SetDistanceCallbackThreshold('o', 0, 1);
 
 			// Setup and start timer...
 			var mre = new ManualResetEvent(false);
@@ -159,7 +177,7 @@ namespace SmartMailBox
 			System.Console.WriteLine(DateTime.Now + ": Exiting!");
 			ipcon.Disconnect();
 
-			Segment4x7.TurnOffSegment();
+			Segment4x7.WriteSegments(OFF);
 		}
 	}
 }
