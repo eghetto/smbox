@@ -86,7 +86,7 @@ namespace SmartMailBox
 			}
 		}
 
-		// notify if box contains new mail
+		// notify home server
 		static void Notify()
 		{
 			switch (CurrentState)
